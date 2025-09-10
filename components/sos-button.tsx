@@ -1,83 +1,55 @@
-"use client"
+'use client';
+import { useState, useEffect } from 'react';
+import { supabase } from '../src/supabaseClient';
 
-import { useState, useRef } from "react"
-import { Button } from "@/components/ui/button"
-import { AlertTriangle } from "lucide-react"
-import { cn } from "@/lib/utils"
+interface SOSButtonProps {
+  userId: string;
+}
 
-export function SOSButton() {
-  const [tapCount, setTapCount] = useState(0)
-  const [isActivated, setIsActivated] = useState(false)
-  const [isShaking, setIsShaking] = useState(false)
-  const timeoutRef = useRef<NodeJS.Timeout>()
+export default function SOSButton({ userId }: SOSButtonProps) {
+  const [tapCount, setTapCount] = useState(0);
+  const [location, setLocation] = useState<{ latitude: number; longitude: number } | null>(null);
 
-  const handleSOSTap = () => {
-    const newTapCount = tapCount + 1
-    setTapCount(newTapCount)
-    setIsShaking(true)
+  // Get live location as soon as component mounts
+  useEffect(() => {
+    if (!navigator.geolocation) return;
+    navigator.geolocation.getCurrentPosition(
+      (pos) => {
+        setLocation({ latitude: pos.coords.latitude, longitude: pos.coords.longitude });
+      },
+      (err) => console.error('Failed to get location:', err)
+    );
+  }, []);
 
-    // Clear existing timeout
-    if (timeoutRef.current) {
-      clearTimeout(timeoutRef.current)
+  const handleSOS = async () => {
+    setTapCount(prev => prev + 1);
+
+    if (tapCount + 1 === 3) {
+      try {
+        await supabase.from('sos_alerts').insert([{
+          user_id: userId,
+          latitude: location?.latitude ?? null,
+          longitude: location?.longitude ?? null,
+          status: 'pending'
+        }]);
+        alert('SOS sent!');
+      } catch (error) {
+        console.error('Failed to send SOS:', error);
+        alert('Failed to send SOS.');
+      }
+      setTapCount(0);
     }
 
-    // Reset shake animation
-    setTimeout(() => setIsShaking(false), 200)
-
-    if (newTapCount >= 3) {
-      // Activate SOS
-      setIsActivated(true)
-      setTapCount(0)
-
-      // Simulate emergency call or alert
-      alert(
-        "🚨 EMERGENCY ALERT ACTIVATED!\n\nContacting emergency services...\n\nLocation: Current GPS coordinates\nTime: " +
-          new Date().toLocaleString(),
-      )
-
-      // Reset after 5 seconds
-      setTimeout(() => {
-        setIsActivated(false)
-      }, 5000)
-    } else {
-      // Reset tap count after 2 seconds if not completed
-      timeoutRef.current = setTimeout(() => {
-        setTapCount(0)
-      }, 2000)
-    }
-  }
+    // Reset tap count after 5 seconds if not tapped enough
+    setTimeout(() => setTapCount(0), 5000);
+  };
 
   return (
-    <div className="fixed bottom-20 right-4 z-50">
-      <Button
-        onClick={handleSOSTap}
-        className={cn(
-          "h-14 w-14 rounded-full shadow-lg transition-all duration-200",
-          isActivated
-            ? "bg-red-600 hover:bg-red-700 animate-pulse"
-            : tapCount > 0
-              ? "bg-orange-500 hover:bg-orange-600"
-              : "bg-red-500 hover:bg-red-600",
-          isShaking && "animate-bounce",
-        )}
-        size="icon"
-      >
-        <AlertTriangle className="h-6 w-6 text-white" />
-      </Button>
-
-      {tapCount > 0 && !isActivated && (
-        <div className="absolute -top-8 left-1/2 transform -translate-x-1/2">
-          <div className="bg-black/80 text-white text-xs px-2 py-1 rounded whitespace-nowrap">{tapCount}/3 taps</div>
-        </div>
-      )}
-
-      {isActivated && (
-        <div className="absolute -top-8 left-1/2 transform -translate-x-1/2">
-          <div className="bg-red-600 text-white text-xs px-2 py-1 rounded whitespace-nowrap animate-pulse">
-            SOS ACTIVE
-          </div>
-        </div>
-      )}
-    </div>
-  )
+    <button
+      onClick={handleSOS}
+      className="bg-red-600 text-white px-6 py-3 rounded hover:bg-red-700"
+    >
+      SOS
+    </button>
+  );
 }
